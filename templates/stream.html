@@ -1,0 +1,616 @@
+
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Planning your trip... — AI Travel Planner</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+ 
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+
+  <style>
+    
+    .agent-section {
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+      display: none;
+    }
+    .agent-section.visible {
+      display: block;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    
+    .status-bar {
+      position: sticky; top: 0; z-index: 200;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent); animation: pulse 1s infinite;
+    }
+    .status-dot.done { background: #22c55e; animation: none; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .status-text { font-size: 14px; color: var(--muted); }
+
+    
+    .progress-track { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+    .progress-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--border); transition: background 0.3s;
+    }
+    .progress-dot.active   { background: var(--accent); }
+    .progress-dot.complete { background: #22c55e; }
+
+    
+    .skeleton-section { margin-top: 40px; padding-top: 32px; border-top: 1px solid var(--border); }
+    .skeleton-title { height: 24px; width: 200px; background: var(--bg3); border-radius: 6px; margin-bottom: 16px; animation: shimmer 1.5s infinite; }
+    .skeleton-row   { height: 14px; background: var(--bg3); border-radius: 4px; margin-bottom: 10px; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0%{opacity:0.4} 50%{opacity:0.8} 100%{opacity:0.4} }
+
+    
+    #map-container {
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    #travel-map {
+      height: 420px;
+      width: 100%;
+      
+    }
+
+    
+    .map-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    
+    .map-placeholder {
+      height: 420px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg2);
+      color: var(--muted);
+      font-size: 14px;
+      gap: 10px;
+      animation: shimmer 1.5s infinite;
+    }
+
+    
+    .done-banner {
+      display: none;
+      background: rgba(34,197,94,0.1);
+      border: 1px solid rgba(34,197,94,0.3);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-top: 40px;
+      text-align: center;
+      color: #22c55e;
+      font-size: 15px;
+      font-weight: 500;
+    }
+    .done-banner.visible { display: block; }
+
+    
+    .pdf-btn {
+      background: white;
+      color: #1e1b4b;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .pdf-btn:hover  { opacity: 0.9; }
+    .pdf-btn:active { transform: scale(0.98); }
+    .pdf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .pdf-status {
+      margin-top: 10px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.7);
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+
+  
+  <div class="status-bar">
+    <div class="status-dot" id="status-dot"></div>
+    <span class="status-text" id="status-text">Starting agents...</span>
+    <div class="progress-track">
+      <div class="progress-dot" id="dot-flights"   title="Flights"></div>
+      <div class="progress-dot" id="dot-hotels"    title="Hotels"></div>
+      <div class="progress-dot" id="dot-itinerary" title="Itinerary"></div>
+      <div class="progress-dot" id="dot-budget"    title="Budget"></div>
+      <div class="progress-dot" id="dot-culture"   title="Culture"></div>
+    </div>
+  </div>
+
+  
+  <div class="result-hero">
+    <a href="/" class="back-link">← Change details</a>
+    <div class="badge">✦ Live — agents running now</div>
+    <h1>{{ user_input.destination }}</h1>
+    <div class="meta-pills">
+      <span>📍 From {{ user_input.origin }}</span>
+      <span>📅 {{ user_input.travel_dates }}</span>
+      <span>🕐 {{ user_input.duration_days }} days</span>
+      <span>👥 {{ user_input.num_travelers }} traveler(s)</span>
+    </div>
+  </div>
+
+  <div class="container">
+
+    
+    <div class="skeleton-section" id="skeleton">
+      <div class="skeleton-title"></div>
+      <div class="skeleton-row" style="width:90%"></div>
+      <div class="skeleton-row" style="width:75%"></div>
+      <div class="skeleton-row" style="width:82%"></div>
+    </div>
+
+    
+    <section class="plan-section agent-section" id="section-flights">
+      <div class="section-header">
+        <span class="section-icon">✈️</span>
+        <div><h2>Flights</h2><p class="section-agent">Flights Agent</p></div>
+      </div>
+      <div id="content-flights"></div>
+    </section>
+
+    
+    <section class="plan-section agent-section" id="section-hotels">
+      <div class="section-header">
+        <span class="section-icon">🏨</span>
+        <div><h2>Hotels & Accommodation</h2><p class="section-agent">Hotels Agent</p></div>
+      </div>
+      <div id="content-hotels"></div>
+    </section>
+
+    
+    <section class="plan-section agent-section" id="section-itinerary">
+      <div class="section-header">
+        <span class="section-icon">🗓️</span>
+        <div><h2>Day-by-Day Itinerary</h2><p class="section-agent">Itinerary Agent</p></div>
+      </div>
+      <div id="content-itinerary"></div>
+    </section>
+
+    
+    <section class="plan-section agent-section" id="section-map">
+      <div class="section-header">
+        <span class="section-icon">🗺️</span>
+        <div>
+          <h2>Interactive Map</h2>
+          <p class="section-agent">Geocoded from Itinerary · OpenStreetMap</p>
+        </div>
+      </div>
+      <div id="map-container">
+      
+        <div id="travel-map"></div>
+      </div>
+      
+      <div class="map-legend" id="map-legend"></div>
+    </section>
+
+  
+    <section class="plan-section agent-section" id="section-budget">
+      <div class="section-header">
+        <span class="section-icon">💰</span>
+        <div><h2>Budget Breakdown</h2><p class="section-agent">Budget Agent</p></div>
+      </div>
+      <div id="content-budget"></div>
+    </section>
+
+    
+    <section class="plan-section agent-section" id="section-culture">
+      <div class="section-header">
+        <span class="section-icon">🍛</span>
+        <div><h2>Local Food & Culture</h2><p class="section-agent">Culture Agent</p></div>
+      </div>
+      <div id="content-culture"></div>
+    </section>
+
+    <div class="done-banner" id="done-banner">
+      <div style="margin-bottom:14px">✦ Your complete travel plan is ready — scroll up to explore</div>
+      <button class="pdf-btn" id="pdf-btn" onclick="downloadPDF()">
+        ⬇ Download PDF
+      </button>
+      <div class="pdf-status" id="pdf-status"></div>
+    </div>
+
+  </div>
+
+  <footer>
+    <p>Built with Flask + Groq API · Multi-agent architecture · <a href="/">Plan another trip →</a></p>
+  </footer>
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<script>
+
+const source = new EventSource("/stream-events");
+
+let completedAgents = 0;
+const agentOrder = ["flights", "hotels", "itinerary", "budget", "culture"];
+document.getElementById("dot-flights").classList.add("active");
+source.onmessage = function(event) {
+  const msg = JSON.parse(event.data);
+
+  if (msg.agent === "status") { updateStatus(msg.data.message); return; }
+
+  if (msg.agent === "done") {
+    
+    travelPlanData.meta = msg.data.meta;
+    finishStream();
+    return;
+  }
+
+  
+  if (msg.agent === "map") { renderMap(msg.data.pins); return; }
+
+  
+  travelPlanData[msg.agent] = msg.data;
+
+  renderSection(msg.agent, msg.data);
+  markAgentDone(msg.agent);
+};
+
+source.onerror = function() {
+  updateStatus("⚠️ Connection lost — please refresh.");
+  document.getElementById("status-dot").style.background = "#ef4444";
+  source.close();
+};
+
+
+function updateStatus(text) {
+  document.getElementById("status-text").textContent = text;
+}
+
+function markAgentDone(agentName) {
+  completedAgents++;
+  const dot = document.getElementById("dot-" + agentName);
+  if (dot) { dot.classList.remove("active"); dot.classList.add("complete"); }
+  const nextAgent = agentOrder[completedAgents];
+  if (nextAgent) document.getElementById("dot-" + nextAgent)?.classList.add("active");
+  if (completedAgents === 1) document.getElementById("skeleton").style.display = "none";
+}
+
+function showSection(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = "block";
+  setTimeout(() => el.classList.add("visible"), 20);
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+
+const travelPlanData = { meta: {}, flights: {}, hotels: {}, itinerary: {}, budget: {}, culture: {} };
+
+function finishStream() {
+  source.close();
+  document.getElementById("status-dot").classList.add("done");
+  updateStatus("✦ All agents done — your plan is complete!");
+  document.getElementById("done-banner").classList.add("visible");
+}
+
+function downloadPDF() {
+  
+
+  const btn    = document.getElementById("pdf-btn");
+  const status = document.getElementById("pdf-status");
+
+  btn.disabled    = true;
+  btn.textContent = "⏳ Generating PDF...";
+  status.textContent = "This takes a few seconds...";
+
+  const form  = document.createElement("form");
+  form.method = "POST";
+  form.action = "/download-pdf";
+
+  const input   = document.createElement("input");
+  input.type    = "hidden";
+  input.name    = "plan_data";
+  input.value   = JSON.stringify(travelPlanData);
+
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit();
+  document.body.removeChild(form);
+
+  
+  setTimeout(() => {
+    btn.disabled    = false;
+    btn.textContent = "⬇ Download PDF";
+    status.textContent = "✓ Download started!";
+    setTimeout(() => status.textContent = "", 3000);
+  }, 3000);
+}
+
+
+let leafletMap = null; 
+
+function renderMap(pins) {
+  if (!pins || pins.length === 0) return;
+
+  
+  showSection("section-map");
+
+  
+  setTimeout(() => {
+    
+    if (leafletMap) {
+      leafletMap.remove(); 
+    }
+
+    leafletMap = L.map("travel-map", {
+      zoomControl: true,
+      scrollWheelZoom: false  
+    });
+
+   
+    L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/">CARTO</a>',
+        maxZoom: 18
+      }
+    ).addTo(leafletMap);
+
+    
+    const bounds = [];
+    
+    const seenDays = {};
+
+    pins.forEach(pin => {
+      const latlng = [pin.lat, pin.lon];
+      bounds.push(latlng);
+
+      
+      const marker = L.circleMarker(latlng, {
+        radius:      9,
+        fillColor:   pin.color,
+        color:       "#ffffff",      
+        weight:      2,
+        opacity:     1,
+        fillOpacity: 0.9
+      }).addTo(leafletMap);
+
+     
+      marker.bindPopup(`
+        <div style="font-family:Arial,sans-serif;min-width:120px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">${pin.name}</div>
+          <div style="font-size:11px;color:#666">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${pin.color};margin-right:4px"></span>
+            Day ${pin.day}
+          </div>
+        </div>
+      `);
+
+      
+      if (!seenDays[pin.day]) {
+        seenDays[pin.day] = pin.color;
+      }
+    });
+
+
+    if (bounds.length > 0) {
+      leafletMap.fitBounds(bounds, { padding: [40, 40] });
+    }
+
+    
+    const legend = document.getElementById("map-legend");
+    legend.innerHTML="";
+    Object.entries(seenDays).sort((a,b) => a[0]-b[0]).forEach(([day, color]) => {
+      legend.innerHTML += `
+        <div class="legend-item">
+          <div class="legend-dot" style="background:${color}"></div>
+          <span>Day ${day}</span>
+        </div>`;
+    });
+
+    
+    leafletMap.invalidateSize();
+
+  }, 300);
+}
+
+
+
+function renderSection(agentName, data) {
+  const renderers = {
+    flights: renderFlights, hotels: renderHotels,
+    itinerary: renderItinerary, budget: renderBudget, culture: renderCulture
+  };
+  if (renderers[agentName]) {
+    renderers[agentName](data);
+    showSection("section-" + agentName);
+  }
+}
+
+function renderFlights(data) {
+  const el = document.getElementById("content-flights");
+  if (data.error) { el.innerHTML = `<p class="error-msg">${data.error}</p>`; return; }
+  let html = '<div class="card-grid">';
+  (data.suggested_routes || []).forEach(r => {
+    html += `<div class="card">
+      <div class="card-title">${r.route}</div>
+      <div class="card-row"><span>Type</span><span>${r.type}</span></div>
+      <div class="card-row"><span>Duration</span><span>${r.duration}</span></div>
+      <div class="card-row"><span>Est. cost</span><span class="highlight">₹${r.estimated_cost_inr}</span></div>
+    </div>`;
+  });
+  html += '</div>';
+  if (data.airlines?.length) {
+    html += '<div class="info-row">';
+    html += `<div class="info-chip">🕐 Book ${data.best_time_to_book}</div>`;
+    data.airlines.forEach(a => html += `<div class="info-chip">${a}</div>`);
+    html += '</div>';
+  }
+  if (data.travel_tips?.length) {
+    html += '<ul class="tips-list">';
+    data.travel_tips.forEach(t => html += `<li>${t}</li>`);
+    html += '</ul>';
+  }
+  el.innerHTML = html;
+}
+
+function renderHotels(data) {
+  const el = document.getElementById("content-hotels");
+  if (data.error) { el.innerHTML = `<p class="error-msg">${data.error}</p>`; return; }
+  let html = '<div class="card-grid">';
+  (data.recommended_areas || []).forEach(a => {
+    html += `<div class="card">
+      <div class="card-title">${a.area}</div>
+      <div class="card-desc">${a.why}</div>
+      <span class="tag">${a.hotel_type}</span>
+    </div>`;
+  });
+  html += '</div>';
+  if (data.budget_breakdown) {
+    const b = data.budget_breakdown;
+    html += `<div class="budget-tiers">
+      <div class="tier tier-budget"><span class="tier-label">Budget</span><span>${b.budget}</span></div>
+      <div class="tier tier-mid"><span class="tier-label">Mid-range</span><span>${b.mid_range}</span></div>
+      <div class="tier tier-luxury"><span class="tier-label">Luxury</span><span>${b.luxury}</span></div>
+    </div>`;
+  }
+  if (data.top_picks?.length) {
+    html += '<div class="card-grid">';
+    data.top_picks.forEach(h => {
+      html += `<div class="card">
+        <div class="card-title">${h.name}</div>
+        <div class="card-row"><span>Area</span><span>${h.area}</span></div>
+        <div class="card-row"><span>Tier</span><span>${(h.tier||'').replace('_',' ')}</span></div>
+        <div class="highlights">${(h.highlights||[]).map(x=>`<span class="tag">${x}</span>`).join('')}</div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+function renderItinerary(data) {
+  const el = document.getElementById("content-itinerary");
+  if (data.error) { el.innerHTML = `<p class="error-msg">${data.error}</p>`; return; }
+  let html = '<div class="itinerary-list">';
+  (data.itinerary || []).forEach(day => {
+    html += `<div class="day-card">
+      <div class="day-header">
+        <span class="day-num">Day ${day.day}</span>
+        <span class="day-title">${day.title}</span>
+      </div>
+      <div class="day-body">
+        <div class="time-slot"><span class="time-label">🌅 Morning</span><span>${day.morning}</span></div>
+        <div class="time-slot"><span class="time-label">☀️ Afternoon</span><span>${day.afternoon}</span></div>
+        <div class="time-slot"><span class="time-label">🌙 Evening</span><span>${day.evening}</span></div>
+        ${day.places?.length ? `<div class="day-places">${day.places.map(p=>`<span class="tag">📍 ${p}</span>`).join('')}</div>` : ''}
+        ${day.estimated_local_spend_inr ? `<div class="day-spend">Est. daily spend: <strong>₹${day.estimated_local_spend_inr}</strong></div>` : ''}
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+  if (data.must_visit?.length) {
+    html += '<div class="must-visit"><h3>Must visit</h3><div class="info-row">';
+    data.must_visit.forEach(p => html += `<div class="info-chip">⭐ ${p}</div>`);
+    html += '</div></div>';
+  }
+  el.innerHTML = html;
+}
+
+function renderBudget(data) {
+  const el = document.getElementById("content-budget");
+  if (data.error) { el.innerHTML = `<p class="error-msg">${data.error}</p>`; return; }
+  let html = '<div class="budget-table">';
+  Object.entries(data.budget_breakdown || {}).forEach(([cat, vals]) => {
+    html += `<div class="budget-row">
+      <span class="budget-category">${cat.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</span>
+      <span class="budget-range">₹${vals.min} – ₹${vals.max}</span>
+      <span class="budget-note">${vals.note}</span>
+    </div>`;
+  });
+  html += '</div>';
+  if (data.total) {
+    html += `<div class="total-cards">
+      <div class="total-card total-budget"><span>Budget trip</span><strong>₹${data.total.budget_trip}</strong></div>
+      <div class="total-card total-mid"><span>Comfortable</span><strong>₹${data.total.comfortable_trip}</strong></div>
+      <div class="total-card total-luxury"><span>Luxury</span><strong>₹${data.total.luxury_trip}</strong></div>
+    </div>`;
+  }
+  if (data.money_saving_tips?.length) {
+    html += '<ul class="tips-list">';
+    data.money_saving_tips.forEach(t => html += `<li>${t}</li>`);
+    html += '</ul>';
+  }
+  el.innerHTML = html;
+}
+
+function renderCulture(data) {
+  const el = document.getElementById("content-culture");
+  if (data.error) { el.innerHTML = `<p class="error-msg">${data.error}</p>`; return; }
+  let html = '';
+  if (data.must_try_food?.length) {
+    html += '<div class="card-grid">';
+    data.must_try_food.forEach(f => {
+      html += `<div class="card">
+        <div class="card-title">${f.dish}</div>
+        <div class="card-desc">${f.description}</div>
+        <div class="card-row"><span>Where</span><span>${f.where_to_try}</span></div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  if (data.cultural_tips?.length) {
+    html += '<h3>Cultural tips</h3><ul class="tips-list">';
+    data.cultural_tips.forEach(t => html += `<li>${t}</li>`);
+    html += '</ul>';
+  }
+  if (data.hidden_gems?.length) {
+    html += '<h3>Hidden gems</h3><div class="card-grid">';
+    data.hidden_gems.forEach(g => {
+      html += `<div class="card"><div class="card-title">${g.place}</div><div class="card-desc">${g.why}</div></div>`;
+    });
+    html += '</div>';
+  }
+  if (data.things_to_avoid?.length) {
+    html += '<h3>Things to avoid</h3><ul class="tips-list tips-warn">';
+    data.things_to_avoid.forEach(t => html += `<li>${t}</li>`);
+    html += '</ul>';
+  }
+  el.innerHTML = html;
+}
+
+
+</script>
+
+</body>
+</html>

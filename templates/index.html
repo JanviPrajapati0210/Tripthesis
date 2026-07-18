@@ -1,0 +1,80 @@
+
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Travel Planner</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="hero">
+    <div class="hero-content">
+      <div class="badge">✦ Multi-Agent AI</div>
+      <h1>Plan your perfect trip</h1>
+      <p class="subtitle">5 specialized AI agents work together to build your complete travel plan — flights, hotels, itinerary, budget & local tips.</p>
+    </div>
+  </div>
+
+  <div class="container">
+    <form action="/plan-stream" method="POST" class="plan-form">
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="destination">✈️ Destination</label>
+          <input type="text" id="destination" name="destination" placeholder="e.g. Goa, Manali, Kerala" required />
+        </div>
+
+        <div class="form-group">
+          <label for="origin">🏠 Departing from</label>
+          <input type="text" id="origin" name="origin" placeholder="e.g. Ahmedabad, Mumbai, Delhi" required />
+        </div>
+
+        <div class="form-group">
+          <label for="duration_days">📅 Duration (days)</label>
+          <input type="number" id="duration_days" name="duration_days" placeholder="e.g. 5" min="1" max="30" required />
+        </div>
+
+        <div class="form-group">
+          <label for="travel_dates">🗓️ Travel dates</label>
+          <input type="text" id="travel_dates" name="travel_dates" placeholder="e.g. December 20-25" required />
+        </div>
+
+        <div class="form-group">
+          <label for="budget_level">💰 Budget level</label>
+          <select id="budget_level" name="budget_level">
+            <option value="budget">Budget (backpacker)</option>
+            <option value="mid_range" selected>Mid-range (comfortable)</option>
+            <option value="luxury">Luxury</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="travel_style">👥 Travel style</label>
+          <select id="travel_style" name="travel_style">
+            <option value="solo">Solo traveler</option>
+            <option value="couple" selected>Couple</option>
+            <option value="family">Family with kids</option>
+            <option value="friends group">Group of friends</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="num_travelers">🧳 Number of travelers</label>
+          <input type="number" id="num_travelers" name="num_travelers" placeholder="e.g. 2" min="1" max="20" value="2" required />
+        </div>
+
+        <div class="form-group">
+          <label for="interests">🎯 Interests</label>
+          <input type="text" id="interests" name="interests" placeholder="e.g. beaches, food, adventure, history" />
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary">
+        <span>✦ Plan my trip</span>
+        <span class="btn-sub">5 AI agents will get to work</span>
+      </button>
+    </form>
+  </div>
+</body>
+</html>

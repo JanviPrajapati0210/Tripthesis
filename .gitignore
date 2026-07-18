@@ -1,0 +1,16 @@
+
+.env
+.env.*
+!.env.examp
+__pycache__/
+*.pyc
+*.pyo
+venv/
+env/
+.venv/
+instance/
+.flaskenv
+.vscode/
+.idea/
+.DS_Store
+*.log

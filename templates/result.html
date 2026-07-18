@@ -1,0 +1,295 @@
+
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Your Trip to {{ plan.meta.destination }} — AI Travel Planner</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="result-hero">
+    <a href="/" class="back-link">← Plan another trip</a>
+    <div class="badge">✦ Your AI-generated travel plan</div>
+    <h1>{{ plan.meta.destination }}</h1>
+    <div class="meta-pills">
+      <span>📍 From {{ plan.meta.origin }}</span>
+      <span>📅 {{ plan.meta.travel_dates }}</span>
+      <span>🕐 {{ plan.meta.duration_days }} days</span>
+      <span>👥 {{ plan.meta.num_travelers }} traveler(s)</span>
+      <span>💰 {{ plan.meta.budget_level | replace('_', ' ') | title }}</span>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- ✈️ FLIGHTS SECTION -->
+    <section class="plan-section">
+      <div class="section-header">
+        <span class="section-icon">✈️</span>
+        <div>
+          <h2>Flights</h2>
+          <p class="section-agent">Flights Agent</p>
+        </div>
+      </div>
+
+      {% if plan.flights.suggested_routes %}
+        <div class="card-grid">
+          {% for route in plan.flights.suggested_routes %}
+          <div class="card">
+            <div class="card-title">{{ route.route }}</div>
+            <div class="card-row"><span>Type</span><span>{{ route.type }}</span></div>
+            <div class="card-row"><span>Duration</span><span>{{ route.duration }}</span></div>
+            <div class="card-row"><span>Est. cost</span><span class="highlight">₹{{ route.estimated_cost_inr }}</span></div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="info-row">
+          <div class="info-chip">🕐 Book {{ plan.flights.best_time_to_book }}</div>
+          {% for airline in plan.flights.airlines %}
+          <div class="info-chip">{{ airline }}</div>
+          {% endfor %}
+        </div>
+
+        {% if plan.flights.travel_tips %}
+        <ul class="tips-list">
+          {% for tip in plan.flights.travel_tips %}
+          <li>{{ tip }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      {% else %}
+        <p class="error-msg">{{ plan.flights.get('error', 'No flight data available.') }}</p>
+      {% endif %}
+    </section>
+
+    <!-- 🏨 HOTELS SECTION -->
+    <section class="plan-section">
+      <div class="section-header">
+        <span class="section-icon">🏨</span>
+        <div>
+          <h2>Hotels & Accommodation</h2>
+          <p class="section-agent">Hotels Agent</p>
+        </div>
+      </div>
+
+      {% if plan.hotels.recommended_areas %}
+        <div class="card-grid">
+          {% for area in plan.hotels.recommended_areas %}
+          <div class="card">
+            <div class="card-title">{{ area.area }}</div>
+            <div class="card-desc">{{ area.why }}</div>
+            <div class="tag">{{ area.hotel_type }}</div>
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if plan.hotels.budget_breakdown %}
+        <div class="budget-tiers">
+          <div class="tier tier-budget">
+            <span class="tier-label">Budget</span>
+            <span>{{ plan.hotels.budget_breakdown.budget }}</span>
+          </div>
+          <div class="tier tier-mid">
+            <span class="tier-label">Mid-range</span>
+            <span>{{ plan.hotels.budget_breakdown.mid_range }}</span>
+          </div>
+          <div class="tier tier-luxury">
+            <span class="tier-label">Luxury</span>
+            <span>{{ plan.hotels.budget_breakdown.luxury }}</span>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if plan.hotels.top_picks %}
+        <div class="card-grid">
+          {% for hotel in plan.hotels.top_picks %}
+          <div class="card card-hotel">
+            <div class="card-title">{{ hotel.name }}</div>
+            <div class="card-row"><span>Area</span><span>{{ hotel.area }}</span></div>
+            <div class="card-row"><span>Tier</span><span>{{ hotel.tier | replace('_', ' ') | title }}</span></div>
+            <div class="highlights">
+              {% for h in hotel.highlights %}<span class="tag">{{ h }}</span>{% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      {% else %}
+        <p class="error-msg">{{ plan.hotels.get('error', 'No hotel data available.') }}</p>
+      {% endif %}
+    </section>
+
+    <!-- 🗓️ ITINERARY SECTION -->
+    <section class="plan-section">
+      <div class="section-header">
+        <span class="section-icon">🗓️</span>
+        <div>
+          <h2>Day-by-Day Itinerary</h2>
+          <p class="section-agent">Itinerary Agent</p>
+        </div>
+      </div>
+
+      {% if plan.itinerary.itinerary %}
+        <div class="itinerary-list">
+          {% for day in plan.itinerary.itinerary %}
+          <div class="day-card">
+            <div class="day-header">
+              <span class="day-num">Day {{ day.day }}</span>
+              <span class="day-title">{{ day.title }}</span>
+            </div>
+            <div class="day-body">
+              <div class="time-slot">
+                <span class="time-label">🌅 Morning</span>
+                <span>{{ day.morning }}</span>
+              </div>
+              <div class="time-slot">
+                <span class="time-label">☀️ Afternoon</span>
+                <span>{{ day.afternoon }}</span>
+              </div>
+              <div class="time-slot">
+                <span class="time-label">🌙 Evening</span>
+                <span>{{ day.evening }}</span>
+              </div>
+              {% if day.places %}
+              <div class="day-places">
+                {% for place in day.places %}<span class="tag">📍 {{ place }}</span>{% endfor %}
+              </div>
+              {% endif %}
+              {% if day.estimated_local_spend_inr %}
+              <div class="day-spend">Est. daily spend: <strong>₹{{ day.estimated_local_spend_inr }}</strong></div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if plan.itinerary.must_visit %}
+        <div class="must-visit">
+          <h3>Must visit</h3>
+          <div class="info-row">
+            {% for place in plan.itinerary.must_visit %}
+            <div class="info-chip">⭐ {{ place }}</div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      {% else %}
+        <p class="error-msg">{{ plan.itinerary.get('error', 'No itinerary available.') }}</p>
+      {% endif %}
+    </section>
+
+    <!-- 💰 BUDGET SECTION -->
+    <section class="plan-section">
+      <div class="section-header">
+        <span class="section-icon">💰</span>
+        <div>
+          <h2>Budget Breakdown</h2>
+          <p class="section-agent">Budget Agent</p>
+        </div>
+      </div>
+
+      {% if plan.budget.budget_breakdown %}
+        <div class="budget-table">
+          {% for category, values in plan.budget.budget_breakdown.items() %}
+          <div class="budget-row">
+            <span class="budget-category">{{ category | replace('_', ' ') | title }}</span>
+            <span class="budget-range">₹{{ values.min }} – ₹{{ values.max }}</span>
+            <span class="budget-note">{{ values.note }}</span>
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if plan.budget.total %}
+        <div class="total-cards">
+          <div class="total-card total-budget">
+            <span>Budget trip</span>
+            <strong>₹{{ plan.budget.total.budget_trip }}</strong>
+          </div>
+          <div class="total-card total-mid">
+            <span>Comfortable</span>
+            <strong>₹{{ plan.budget.total.comfortable_trip }}</strong>
+          </div>
+          <div class="total-card total-luxury">
+            <span>Luxury</span>
+            <strong>₹{{ plan.budget.total.luxury_trip }}</strong>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if plan.budget.money_saving_tips %}
+        <ul class="tips-list">
+          {% for tip in plan.budget.money_saving_tips %}
+          <li>{{ tip }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      {% else %}
+        <p class="error-msg">{{ plan.budget.get('error', 'No budget data available.') }}</p>
+      {% endif %}
+    </section>
+
+    <!-- 🍛 CULTURE SECTION -->
+    <section class="plan-section">
+      <div class="section-header">
+        <span class="section-icon">🍛</span>
+        <div>
+          <h2>Local Food & Culture</h2>
+          <p class="section-agent">Culture Agent</p>
+        </div>
+      </div>
+
+      {% if plan.culture.must_try_food %}
+        <div class="card-grid">
+          {% for food in plan.culture.must_try_food %}
+          <div class="card">
+            <div class="card-title">{{ food.dish }}</div>
+            <div class="card-desc">{{ food.description }}</div>
+            <div class="card-row"><span>Where</span><span>{{ food.where_to_try }}</span></div>
+          </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if plan.culture.cultural_tips %}
+      <h3>Cultural tips</h3>
+      <ul class="tips-list">
+        {% for tip in plan.culture.cultural_tips %}
+        <li>{{ tip }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      {% if plan.culture.hidden_gems %}
+      <h3>Hidden gems</h3>
+      <div class="card-grid">
+        {% for gem in plan.culture.hidden_gems %}
+        <div class="card">
+          <div class="card-title">{{ gem.place }}</div>
+          <div class="card-desc">{{ gem.why }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if plan.culture.things_to_avoid %}
+      <h3>Things to avoid</h3>
+      <ul class="tips-list tips-warn">
+        {% for thing in plan.culture.things_to_avoid %}
+        <li>{{ thing }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+  </div><!-- /container -->
+
+  <footer>
+    <p>Built with Flask + Groq API · Multi-agent architecture · <a href="/">Plan another trip →</a></p>
+  </footer>
+
+</body>
+</html>
