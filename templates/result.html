@@ -182,6 +182,53 @@
       {% endif %}
     </section>
 
+    <!-- 🔍 FEASIBILITY SECTION -->
+<section class="plan-section">
+  <div class="section-header">
+    <span class="section-icon">🔍</span>
+    <div>
+      <h2>Feasibility Review</h2>
+      <p class="section-agent">Feasibility Agent</p>
+    </div>
+  </div>
+
+  {% if plan.feasibility and plan.feasibility.overall_feasibility %}
+    <div class="info-row">
+      <div class="info-chip">Overall: {{ plan.feasibility.overall_feasibility | upper }}</div>
+    </div>
+    {% if plan.feasibility.summary %}
+    <p style="margin:12px 0;color:var(--muted)">{{ plan.feasibility.summary }}</p>
+    {% endif %}
+
+    {% if plan.feasibility.day_reviews %}
+    <div class="itinerary-list">
+      {% for review in plan.feasibility.day_reviews %}
+      <div class="day-card">
+        <div class="day-header">
+          <span class="day-num">Day {{ review.day }}</span>
+          <span class="tag">{{ review.status | replace('_', ' ') }}</span>
+        </div>
+        <div class="day-body">
+          <div class="time-slot"><span>{{ review.note }}</span></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if plan.feasibility.suggestions %}
+    <h3>Suggestions</h3>
+    <ul class="tips-list">
+      {% for suggestion in plan.feasibility.suggestions %}
+      <li>{{ suggestion }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  {% else %}
+    <p class="error-msg">No feasibility review available.</p>
+  {% endif %}
+</section>
+
     <!-- 💰 BUDGET SECTION -->
     <section class="plan-section">
       <div class="section-header">

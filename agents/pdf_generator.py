@@ -342,7 +342,57 @@ def generate_pdf(travel_plan: dict) -> bytes:
     if itinerary.get("must_visit"):
         story.append(Paragraph("<b>Must visit:</b> " + " · ".join(itinerary["must_visit"]), styles["body"]))
 
+    
     story.append(Spacer(1, 6*mm))
+
+    # ── FEASIBILITY SECTION ───────────────────────────────────────────
+    feasibility = travel_plan.get("feasibility", {})
+    if feasibility and feasibility.get("overall_feasibility") not in (None, "unknown"):
+        story.append(section_header("🔍", "Feasibility Review", "Feasibility Agent", styles))
+
+        verdict = feasibility.get("overall_feasibility", "—")
+        VERDICT_HEX = {"high": "#0F766E", "medium": "#B45309", "low": "#DC2626"}
+        verdict_hex = VERDICT_HEX.get(verdict, "#64748B")
+
+        story.append(Paragraph(
+            f'<font color="{verdict_hex}"><b>Overall feasibility: {verdict.upper()}</b></font>',
+            styles["body"]
+        ))
+        if feasibility.get("summary"):
+            story.append(Paragraph(feasibility["summary"], styles["body"]))
+        story.append(Spacer(1, 3*mm))
+
+        day_reviews = feasibility.get("day_reviews", [])
+        if day_reviews:
+            rows = [["Day", "Status", "Note"]]
+            for r in day_reviews:
+                rows.append([
+                    str(r.get("day", "")),
+                    r.get("status", "").replace("_", " ").title(),
+                    r.get("note", "")
+                ])
+            t = Table(rows, colWidths=[15*mm, 30*mm, 125*mm])
+            t.setStyle(TableStyle([
+                ("BACKGROUND",    (0, 0), (-1, 0), colors.HexColor("#334155")),
+                ("TEXTCOLOR",     (0, 0), (-1, 0), WHITE),
+                ("FONTNAME",      (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE",      (0, 0), (-1, -1), 9),
+                ("ROWBACKGROUNDS",(0, 1), (-1, -1), [WHITE, GRAY_BG]),
+                ("GRID",          (0, 0), (-1, -1), 0.5, BORDER),
+                ("TOPPADDING",    (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING",   (0, 0), (-1, -1), 6),
+                ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+            ]))
+            story.append(t)
+            story.append(Spacer(1, 4*mm))
+
+        for suggestion in feasibility.get("suggestions", []):
+            story.append(Paragraph(f"• {suggestion}", styles["tip"]))
+
+        story.append(Spacer(1, 6*mm))
+
+    # ── BUDGET SECTION ────────────────────────────────────────────────
 
     
     budget = travel_plan.get("budget", {})
