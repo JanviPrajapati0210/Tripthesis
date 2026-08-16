@@ -80,7 +80,7 @@ def run(destination: str, duration_days: int, travel_style: str, interests: str)
     Make it detailed and practical, day by day.
     """
 
-    return call_agent(SYSTEM_PROMPT, user_message, label="Itinerary")
+    return call_agent(SYSTEM_PROMPT, user_message, label="Itinerary",max_tokens=2048)
 
 
 def refine(destination: str, duration_days: int, travel_style: str,
@@ -105,4 +105,4 @@ def refine(destination: str, duration_days: int, travel_style: str,
     FULL updated itinerary using the same JSON schema.
     """
 
-    return call_agent(REFINE_SYSTEM_PROMPT, user_message, label="Itinerary Refinement")
+    return call_agent(REFINE_SYSTEM_PROMPT, user_message, label="Itinerary Refinement",max_tokens=2048)

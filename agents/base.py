@@ -24,29 +24,24 @@ from config import GROQ_API_KEY, MODEL, TEMPERATURE, MAX_TOKENS
 client = Groq(api_key=GROQ_API_KEY)
 
 
-def call_agent(system_prompt: str, user_message: str, label: str) -> dict:
+def call_agent(system_prompt: str, user_message: str, label: str, max_tokens: int = None) -> dict:
     """
     Calls the Groq API with a given system prompt + user message,
     and returns a parsed dict.
 
-    label: human-readable agent name, used only in error messages
-           (e.g. "Flights", "Hotels") so the frontend/logs can tell
-           which agent failed.
+    label: human-readable agent name, used only in error messages.
+    max_tokens: optional override of the default MAX_TOKENS from config.
+                Useful for agents (like itinerary generation/refinement)
+                that produce larger structured output than the rest.
 
-    Returns either:
-      - the parsed JSON dict from the model, or
-      - {"error": "...", ...} if the API call failed or the model
-        didn't return valid JSON.
-
-    This function never raises — callers can always trust they'll get
-    a dict back, which matters a lot for the SSE stream in app.py where
-    an uncaught exception would kill the whole generator.
+    Returns either the parsed JSON dict, or {"error": ...} if the call
+    failed or the model didn't return valid JSON.
     """
     try:
         response = client.chat.completions.create(
             model=MODEL,
             temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
+            max_tokens=max_tokens or MAX_TOKENS,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},
