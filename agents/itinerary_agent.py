@@ -1,8 +1,5 @@
-from groq import Groq
+from agents.base import call_agent
 import json
-from config import GROQ_API_KEY, MODEL, TEMPERATURE, MAX_TOKENS
-
-client = Groq(api_key=GROQ_API_KEY)
 
 SYSTEM_PROMPT = """
 You are a travel itinerary expert for an AI travel assistant.
@@ -30,10 +27,48 @@ Create one entry per day. Be specific with place names and activities.
 Respond ONLY with JSON. No extra text before or after.
 """
 
+# --- CONCEPT: A second, narrower prompt for targeted edits ---
+# The original SYSTEM_PROMPT is for generating a plan from nothing.
+# Refining is a different task: the model already has a full itinerary
+# and should change ONLY what the feedback asks for, leaving everything
+# else as close to untouched as possible.
+REFINE_SYSTEM_PROMPT = """
+You are a travel itinerary editor for an AI travel assistant.
+
+You will be given an EXISTING day-by-day itinerary (as JSON) and a
+piece of user feedback describing what they want changed.
+
+Your job is to return an UPDATED version of the itinerary that
+addresses the feedback, while keeping everything the feedback didn't
+ask about as close to the original as possible. Do not regenerate days
+or details that aren't affected by the feedback.
+
+Respond in the exact same JSON structure as the original itinerary:
+
+{
+  "itinerary": [
+    {
+      "day": 1,
+      "title": "...",
+      "morning": "...",
+      "afternoon": "...",
+      "evening": "...",
+      "places": ["..."],
+      "estimated_local_spend_inr": 1200
+    }
+  ],
+  "general_tips": ["..."],
+  "must_visit": ["..."]
+}
+
+Respond ONLY with the full updated JSON. No extra text before or after.
+"""
+
+
 def run(destination: str, duration_days: int, travel_style: str, interests: str) -> dict:
     """
     Returns a day-by-day itinerary as a structured dict.
-    
+
     interests: e.g. "beaches, food, history, adventure"
     """
     user_message = f"""
@@ -45,19 +80,29 @@ def run(destination: str, duration_days: int, travel_style: str, interests: str)
     Make it detailed and practical, day by day.
     """
 
-    response = client.chat.completions.create(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        max_tokens=MAX_TOKENS,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_message}
-        ]
-    )
+    return call_agent(SYSTEM_PROMPT, user_message, label="Itinerary")
 
-    raw = response.choices[0].message.content.strip()
 
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return {"error": "Itinerary agent returned invalid JSON", "raw": raw}
+def refine(destination: str, duration_days: int, travel_style: str,
+           current_itinerary: dict, feedback: str) -> dict:
+    """
+    Updates an EXISTING itinerary based on free-text user feedback,
+    instead of generating a new one from scratch. This is what powers
+    "chat-based regeneration" — only this one agent re-runs when the
+    user asks for a tweak, not the whole 5-6 agent pipeline.
+    """
+    user_message = f"""
+    Here is the current itinerary for a {duration_days}-day trip to
+    {destination} ({travel_style} travel style):
+
+    {json.dumps(current_itinerary, indent=2)}
+
+    The user's requested change:
+    "{feedback}"
+
+    Update the itinerary to address this feedback. Keep any days or
+    details that aren't related to the feedback unchanged. Return the
+    FULL updated itinerary using the same JSON schema.
+    """
+
+    return call_agent(REFINE_SYSTEM_PROMPT, user_message, label="Itinerary Refinement")

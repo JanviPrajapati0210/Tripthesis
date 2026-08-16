@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, Response, session, jsonify
 from agents import flights_agent, hotels_agent, itinerary_agent, budget_agent, culture_agent
 from agents.orchestrator import plan_trip
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from agents import flights_agent, hotels_agent, itinerary_agent, budget_agent, culture_agent, feasibility_agent
 import json
 import os
 import urllib.request
@@ -100,7 +101,6 @@ def stream_events():
             payload = json.dumps({"agent": agent_name, "data": data})
             return f"data: {payload}\n\n"
 
-       
         labels = {
             "flights":   "✈️ Flights agent working...",
             "hotels":    "🏨 Hotels agent working...",
@@ -113,7 +113,7 @@ def stream_events():
 
         itinerary_result = None
 
-        with ThreadPoolExecutor(max_workers=5) as pool:
+        with ThreadPoolExecutor(max_workers=6) as pool:
             futures = {
                 pool.submit(flights_agent.run, destination, origin, duration_days, travel_dates): "flights",
                 pool.submit(hotels_agent.run, destination, duration_days, budget_level, travel_style): "hotels",
@@ -122,6 +122,9 @@ def stream_events():
                 pool.submit(culture_agent.run, destination, travel_style, duration_days): "culture",
             }
 
+            
+            feasibility_future = None
+
             for future in as_completed(futures):
                 agent_name = futures[future]
                 result = future.result()
@@ -129,8 +132,15 @@ def stream_events():
 
                 if agent_name == "itinerary":
                     itinerary_result = result
+                    yield event("status", {"message": "🔍 Feasibility agent reviewing your itinerary..."})
+                    feasibility_future = pool.submit(
+                        feasibility_agent.run, destination, itinerary_result, travel_style
+                    )
 
-        
+            if feasibility_future is not None:
+                feasibility_result = feasibility_future.result()
+                yield event("feasibility", feasibility_result)
+
         yield event("status", {"message": "🗺️ Mapping your itinerary places..."})
         map_pins = geocode_places(itinerary_result or {}, destination)
         yield event("map", {"pins": map_pins})
@@ -234,7 +244,49 @@ def save_plan():
     session["travel_plan"] = data
     return jsonify({"status": "saved"})
 
+@app.route("/refine-itinerary", methods=["POST"])
+def refine_itinerary():
+    """
+    --- CONCEPT: Targeted agent invocation ---
+    Instead of regenerating the entire 6-agent plan when the user wants
+    a small change, this route re-runs ONLY the itinerary agent (with
+    their feedback as extra context), then re-checks feasibility on the
+    updated itinerary and re-geocodes the map. Flights, hotels, budget,
+    and culture are left completely untouched.
+    """
+    data = request.get_json(silent=True) or {}
 
+    destination        = data.get("destination", "Goa")
+    duration_days      = safe_int(data.get("duration_days"), 5)
+    travel_style        = data.get("travel_style", "couple")
+    current_itinerary   = data.get("itinerary", {})
+    feedback            = (data.get("feedback") or "").strip()
+
+    if not feedback:
+        return jsonify({"error": "Tell me what you'd like to change about the itinerary."}), 400
+
+    if not current_itinerary or not current_itinerary.get("itinerary"):
+        return jsonify({"error": "No existing itinerary to refine yet."}), 400
+
+    updated_itinerary = itinerary_agent.refine(
+        destination=destination,
+        duration_days=duration_days,
+        travel_style=travel_style,
+        current_itinerary=current_itinerary,
+        feedback=feedback
+    )
+
+    if "error" in updated_itinerary:
+        return jsonify({"error": updated_itinerary["error"]}), 502
+
+    feasibility_result = feasibility_agent.run(destination, updated_itinerary, travel_style)
+    map_pins = geocode_places(updated_itinerary, destination)
+
+    return jsonify({
+        "itinerary": updated_itinerary,
+        "feasibility": feasibility_result,
+        "map_pins": map_pins
+    })
 
 from agents.pdf_generator import generate_pdf
 from flask import send_file

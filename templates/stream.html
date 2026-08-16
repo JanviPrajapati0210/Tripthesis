@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -137,6 +136,42 @@
       color: rgba(255,255,255,0.7);
       min-height: 18px;
     }
+
+    /* ── Refine box (chat-based itinerary tweak) ── */
+    .refine-box {
+      margin-top: 20px;
+      padding: 14px 16px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      background: var(--bg2);
+    }
+    .refine-label {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .refine-input-row {
+      display: flex;
+      gap: 10px;
+    }
+    #refine-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text, #fff);
+      font-size: 14px;
+    }
+    #refine-input:focus { outline: none; border-color: var(--accent); }
+    .refine-status {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      min-height: 16px;
+    }
+    .refine-status.error { color: #ef4444; }
+    .refine-status.success { color: #22c55e; }
   </style>
 </head>
 <body>
@@ -149,6 +184,7 @@
       <div class="progress-dot" id="dot-flights"   title="Flights"></div>
       <div class="progress-dot" id="dot-hotels"    title="Hotels"></div>
       <div class="progress-dot" id="dot-itinerary" title="Itinerary"></div>
+      <div class="progress-dot" id="dot-feasibility" title="Feasibility"></div>
       <div class="progress-dot" id="dot-budget"    title="Budget"></div>
       <div class="progress-dot" id="dot-culture"   title="Culture"></div>
     </div>
@@ -202,6 +238,25 @@
         <div><h2>Day-by-Day Itinerary</h2><p class="section-agent">Itinerary Agent</p></div>
       </div>
       <div id="content-itinerary"></div>
+
+      <!-- 💬 Refine box: ask for a targeted change without regenerating everything -->
+      <div class="refine-box" id="refine-box" style="display:none">
+        <div class="refine-label">Want a tweak? Only the itinerary agent will re-run — everything else stays the same.</div>
+        <div class="refine-input-row">
+          <input type="text" id="refine-input" placeholder="e.g. Make Day 2 more relaxed, or add more nightlife" />
+          <button class="pdf-btn" id="refine-btn" onclick="submitRefine()">Update</button>
+        </div>
+        <div class="refine-status" id="refine-status"></div>
+      </div>
+    </section>
+
+    <!-- 🔍 FEASIBILITY REVIEW -->
+    <section class="plan-section agent-section" id="section-feasibility">
+      <div class="section-header">
+        <span class="section-icon">🔍</span>
+        <div><h2>Feasibility Review</h2><p class="section-agent">Feasibility Agent</p></div>
+      </div>
+      <div id="content-feasibility"></div>
     </section>
 
     
@@ -214,7 +269,6 @@
         </div>
       </div>
       <div id="map-container">
-      
         <div id="travel-map"></div>
       </div>
       
@@ -259,9 +313,10 @@
 <script>
 
 const source = new EventSource("/stream-events");
+const userInput = {{ user_input | tojson }};
 
 let completedAgents = 0;
-const agentOrder = ["flights", "hotels", "itinerary", "budget", "culture"];
+const agentOrder = ["flights", "hotels", "itinerary", "feasibility", "budget", "culture"];
 document.getElementById("dot-flights").classList.add("active");
 source.onmessage = function(event) {
   const msg = JSON.parse(event.data);
@@ -314,7 +369,7 @@ function showSection(id) {
 }
 
 
-const travelPlanData = { meta: {}, flights: {}, hotels: {}, itinerary: {}, budget: {}, culture: {} };
+const travelPlanData = { meta: {}, flights: {}, hotels: {}, itinerary: {}, feasibility: {}, budget: {}, culture: {} };
 
 function finishStream() {
   source.close();
@@ -449,11 +504,15 @@ function renderMap(pins) {
 function renderSection(agentName, data) {
   const renderers = {
     flights: renderFlights, hotels: renderHotels,
-    itinerary: renderItinerary, budget: renderBudget, culture: renderCulture
+    itinerary: renderItinerary, feasibility: renderFeasibility,
+    budget: renderBudget, culture: renderCulture
   };
   if (renderers[agentName]) {
     renderers[agentName](data);
     showSection("section-" + agentName);
+    if (agentName === "itinerary") {
+      document.getElementById("refine-box").style.display = "block";
+    }
   }
 }
 
@@ -547,6 +606,48 @@ function renderItinerary(data) {
   el.innerHTML = html;
 }
 
+function renderFeasibility(data) {
+  const el = document.getElementById("content-feasibility");
+  if (data.error) { el.innerHTML = `<p class="error-msg">${data.error}</p>`; return; }
+
+  const verdictColors = { high: "#22c55e", medium: "#f59e0b", low: "#ef4444", unknown: "#64748b" };
+  const statusColors  = { ok: "#22c55e", minor_issue: "#f59e0b", flagged: "#ef4444" };
+  const verdict = data.overall_feasibility || "unknown";
+
+  let html = `<div class="info-row">
+    <div class="info-chip" style="border-color:${verdictColors[verdict]};color:${verdictColors[verdict]}">
+      Overall: ${verdict.toUpperCase()}
+    </div>
+  </div>`;
+
+  if (data.summary) {
+    html += `<p style="margin:12px 0;color:var(--muted)">${data.summary}</p>`;
+  }
+
+  if (data.day_reviews?.length) {
+    html += '<div class="itinerary-list">';
+    data.day_reviews.forEach(d => {
+      const color = statusColors[d.status] || "#64748b";
+      html += `<div class="day-card">
+        <div class="day-header">
+          <span class="day-num">Day ${d.day}</span>
+          <span class="tag" style="background:${color};color:#fff">${(d.status||'').replace('_',' ')}</span>
+        </div>
+        <div class="day-body"><div class="time-slot"><span>${d.note}</span></div></div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  if (data.suggestions?.length) {
+    html += '<h3 style="margin-top:16px">Suggestions</h3><ul class="tips-list">';
+    data.suggestions.forEach(s => html += `<li>${s}</li>`);
+    html += '</ul>';
+  }
+
+  el.innerHTML = html;
+}
+
 function renderBudget(data) {
   const el = document.getElementById("content-budget");
   if (data.error) { el.innerHTML = `<p class="error-msg">${data.error}</p>`; return; }
@@ -609,6 +710,64 @@ function renderCulture(data) {
   el.innerHTML = html;
 }
 
+// ── Chat-based itinerary refinement ──────────────────────────────────
+async function submitRefine() {
+  const input  = document.getElementById("refine-input");
+  const btn    = document.getElementById("refine-btn");
+  const status = document.getElementById("refine-status");
+  const feedback = input.value.trim();
+
+  if (!feedback) {
+    status.textContent = "Type what you'd like changed first.";
+    status.className = "refine-status error";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Updating...";
+  status.textContent = "🔍 Itinerary agent is reworking your plan...";
+  status.className = "refine-status";
+
+  try {
+    const res = await fetch("/refine-itinerary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        destination:    userInput.destination,
+        duration_days:  userInput.duration_days,
+        travel_style:   userInput.travel_style,
+        itinerary:      travelPlanData.itinerary,
+        feedback:       feedback
+      })
+    });
+
+    const result = await res.json();
+
+    if (!res.ok || result.error) {
+      status.textContent = "⚠️ " + (result.error || "Something went wrong.");
+      status.className = "refine-status error";
+      return;
+    }
+
+    travelPlanData.itinerary   = result.itinerary;
+    travelPlanData.feasibility = result.feasibility;
+
+    renderItinerary(result.itinerary);
+    renderFeasibility(result.feasibility);
+    showSection("section-feasibility");
+    renderMap(result.map_pins);
+
+    status.textContent = "✓ Itinerary updated — flights, hotels, budget, and culture were untouched.";
+    status.className = "refine-status success";
+    input.value = "";
+  } catch (err) {
+    status.textContent = "⚠️ Couldn't reach the server. Try again.";
+    status.className = "refine-status error";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Update";
+  }
+}
 
 </script>
 
